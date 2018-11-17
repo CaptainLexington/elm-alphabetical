@@ -29,6 +29,7 @@ Likewise, no attempt is made to alter the strings being sorted. A person's name 
 
 -}
 
+import Regex
 import String
 
 
@@ -92,10 +93,26 @@ naturalSort =
 
 processAll : String -> String
 processAll string =
+    let
+        validCharacters =
+            "[^A-Za-z0-9À-ÿ() ]"
+
+        validCharacterRegex =
+            Maybe.withDefault Regex.never <|
+                Regex.fromString validCharacters
+    in
     string
         -- All strings need to be lowercased for proper comparison
         -- No known alphabetizing standards care about case
         |> String.toLower
+        -- Treat parens as whitespace
+        |> String.replace "(" " "
+        |> String.replace ")" " "
+        |> Regex.replace validCharacterRegex (\_ -> "")
+
+
+
+-- And prune all other non-alphanumeric characters
 
 
 processForLetterByLetter : String -> String
@@ -185,9 +202,9 @@ alphabetical : Options -> String -> String -> Order
 alphabetical options stringA stringB =
     let
         processedA =
-            process options stringA
+            Debug.log "Processed A: " (process options stringA)
 
         processedB =
-            process options stringB
+            Debug.log "Processed B: " (process options stringB)
     in
     compare processedA processedB
