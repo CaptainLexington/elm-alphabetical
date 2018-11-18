@@ -29,7 +29,6 @@ Likewise, no attempt is made to alter the strings being sorted. A person's name 
 -}
 
 import List
-import Parser
 import Regex
 import String
 
