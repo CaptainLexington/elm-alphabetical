@@ -1,9 +1,9 @@
 module Alphabetical exposing
     ( Options, SortMode(..), NumberSort(..)
-    , arabicToEnglish, compare, indexSort, naturalSort, sort
+    , sort, compare, indexSort, naturalSort
     )
 
-{-| Alphabetiical is a library for sorting English strings the way editors and writers tend to sort them, not how computers do.
+{-| Alphabetiical is a library for sorting English words and phrases the way editors and writers tend to sort them, not how computers do.
 
 ##A Note About Proper Nouns
 Many proper nouns, such as people and place names, are very complicated to sort.
@@ -17,14 +17,14 @@ For these reasons, no attempt is made to identify proper nouns or distingish bet
 Likewise, no attempt is made to alter the strings being sorted. A person's name is almost always formatted in an index as "Last, First Middle"; however, Alphabetical will need to have strings provided in this format to be sorted accordingly.
 
 
-# Definition
+## Options
 
 @docs Options, SortMode, NumberSort
 
 
-# Comparitor
+## Comparitor
 
-@docs alphabetical
+@docs sort, compare, indexSort, naturalSort
 
 -}
 
@@ -44,7 +44,7 @@ type SortMode
 {-| Whether to sort numbers according to their numerical value or the spelling of the English word.
 -}
 type NumberSort
-    = Alphabetically
+    = Lexically
     | Numerically
 
 
@@ -70,9 +70,9 @@ type alias Options =
 
 indexSortOptions =
     { sortMode = WordByWord
-    , initialNumberSort = Alphabetically
+    , initialNumberSort = Lexically
     , internalNumberSort = Numerically
-    , years = False
+    , years = True
     , romanNumerals = False
     , ignoreInitialArticle = True
     }
@@ -134,6 +134,7 @@ processForSortMode sortMode =
 
 
 -- Arabic Numerals
+-- Numerals To English
 
 
 singleDigitToEnglish : String -> Result String String
@@ -213,6 +214,9 @@ teensToEnglish number =
 doubleDigitsToEnglish : String -> Result String String
 doubleDigitsToEnglish tens =
     case tens of
+        "0" ->
+            Ok ""
+
         "2" ->
             Ok "twenty"
 
@@ -312,7 +316,11 @@ arabicToEnglish number =
             tens =
                 arabicToEnglish (String.right 2 number)
         in
-        String.join " " [ hundred, "hundred", tens ]
+        if hundred == "" || hundred == "0" then
+            tens
+
+        else
+            String.join " " [ hundred, "hundred", tens ]
 
     else if digits > 3 then
         let
@@ -349,19 +357,98 @@ arabicToEnglish number =
         String.concat [ "Parse Error: ", number ]
 
 
+replaceDigitsWithEnglishWords : Bool -> String -> String
+replaceDigitsWithEnglishWords internal =
+    let
+        digits =
+            if internal then
+                "[0-9]+"
+
+            else
+                "^[0-9]+"
+
+        digitsRegex =
+            Maybe.withDefault Regex.never <|
+                Regex.fromString digits
+    in
+    Regex.replace digitsRegex (.match >> arabicToEnglish)
+
+
+
+-- NUMERALS TO INTEGERS
+-- With due credit to mcordova47/elm-natural-ordering
+
+
+type Chunk
+    = StringPart String
+    | IntPart String
+
+
 processForInitialNumberSort : NumberSort -> String -> String
 processForInitialNumberSort numberSort =
-    identity
+    case numberSort of
+        Lexically ->
+            replaceDigitsWithEnglishWords False
+
+        Numerically ->
+            identity
 
 
 processForInternalNumberSort : NumberSort -> String -> String
 processForInternalNumberSort numberSort =
-    identity
+    case numberSort of
+        Lexically ->
+            replaceDigitsWithEnglishWords True
+
+        Numerically ->
+            identity
+
+
+arabicToEnglishYear : String -> String
+arabicToEnglishYear year =
+    let
+        century =
+            String.left 2 year
+
+        decadeAndYear =
+            String.right 2 year
+    in
+    if String.slice 1 3 year == "00" then
+        arabicToEnglish year
+
+    else if String.right 2 year == "00" then
+        String.join " "
+            [ arabicToEnglish century
+            , "hundred"
+            ]
+
+    else
+        String.join " "
+            [ arabicToEnglish century
+            , arabicToEnglish decadeAndYear
+            ]
+
+
+replaceDigitsWithEnglishYear : String -> String
+replaceDigitsWithEnglishYear =
+    let
+        year =
+            "[0-9]+"
+
+        yearRegex =
+            Maybe.withDefault Regex.never <|
+                Regex.fromString year
+    in
+    Regex.replace yearRegex (.match >> arabicToEnglishYear)
 
 
 processForYears : Bool -> String -> String
 processForYears years =
-    identity
+    if years then
+        replaceDigitsWithEnglishYear
+
+    else
+        identity
 
 
 processForRomanNumerals : Bool -> String -> String
@@ -406,6 +493,7 @@ process { sortMode, initialNumberSort, internalNumberSort, years, romanNumerals,
         |> processForYears years
         -- Convert Roman Numerals to Numbers
         |> processForRomanNumerals romanNumerals
+        -- Translate into either English or Elm Integers
         |> processForInitialNumberSort initialNumberSort
         |> processForInternalNumberSort internalNumberSort
         -- Now, handle whitespace appropriately
@@ -422,33 +510,33 @@ compare : Options -> String -> String -> Order
 compare options stringA stringB =
     let
         processedA =
-            Debug.log "Processed A: " (process options stringA)
+            process options stringA
 
         processedB =
-            Debug.log "Processed B: " (process options stringB)
+            process options stringB
     in
     Basics.compare processedA processedB
 
 
-{-| sort expects a `List` of `Strings`, and so is less flexible than `compare`, but in addition to being more convenient, it is also more efficient. Using `compare`, each computation is done several times per entry; using `sort`, each computation is done only once per entry.
+{-| sort expects and returns a `List` of `Strings`, and so is less flexible than `compare`, but in addition to being more convenient, it is also more efficient. Using `compare`, each computation is done several times per entry; using `sort`, each computation is done only once per entry.
 -}
 sort : Options -> List String -> List String
 sort options strings =
     let
         processedStrings =
-            List.map (process options) strings
+            Debug.log "Processed String: " (List.map (\s -> Tuple.pair s (process options s)) strings)
     in
-    List.sort processedStrings
+    List.map Tuple.first (List.sortBy Tuple.second processedStrings)
 
 
-{-| `indexSort` is sorts according to how the index of a standard English-language non-fiction book would be sorted, and is probably the sort you want if you are sorting a list of English proper nouns, like movie titles or band names.
+{-| `indexSort` sorts according to how the index of a standard English-language non-fiction book would be sorted, and is probably the sort you want if you are sorting a list of English proper nouns, like movie titles or band names.
 -}
 indexSort : List String -> List String
 indexSort =
     sort indexSortOptions
 
 
-{-| `naturalSort` sorts according to our "natural" expecations for strings like filenames, for instance [as described as at Coding Horror ](https://blog.codinghorror.com/sorting-for-humans-natural-sort-order/).
+{-| `naturalSort` sorts according to our "natural" expecations for strings like filenames, for instance [as described at Coding Horror](https://blog.codinghorror.com/sorting-for-humans-natural-sort-order/).
 -}
 naturalSort : List String -> List String
 naturalSort =
