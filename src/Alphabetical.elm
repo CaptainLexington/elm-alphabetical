@@ -541,7 +541,7 @@ sort : Options -> List String -> List String
 sort options strings =
     let
         processedStrings =
-            Debug.log "Processed String: " (List.map (\s -> Tuple.pair s (process options s)) strings)
+            List.map (\s -> Tuple.pair s (process options s)) strings
     in
     List.map Tuple.first (List.sortBy Tuple.second processedStrings)
 
