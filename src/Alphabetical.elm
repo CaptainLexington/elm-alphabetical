@@ -137,6 +137,15 @@ processForSortMode sortMode =
 -- Numerals To English
 
 
+joinToNumber : List String -> String
+joinToNumber strings =
+    let
+        places =
+            List.filter (\s -> s /= "") strings
+    in
+    String.join " " places
+
+
 singleDigitToEnglish : String -> Result String String
 singleDigitToEnglish number =
     case number of
@@ -303,7 +312,7 @@ arabicToEnglish number =
             in
             case doubleDigitsToEnglish tens of
                 Ok word ->
-                    String.join " " [ word, arabicToEnglish ones ]
+                    joinToNumber [ word, arabicToEnglish ones ]
 
                 Err errorMessage ->
                     errorMessage
@@ -320,7 +329,7 @@ arabicToEnglish number =
             tens
 
         else
-            String.join " " [ hundred, "hundred", tens ]
+            joinToNumber [ hundred, "hundred", tens ]
 
     else if digits > 3 then
         let
@@ -343,8 +352,7 @@ arabicToEnglish number =
         in
         case magnitude of
             Ok power ->
-                String.join
-                    " "
+                joinToNumber
                     [ arabicToEnglish initialDigits
                     , power
                     , arabicToEnglish trailingDigits
@@ -417,13 +425,13 @@ arabicToEnglishYear year =
         arabicToEnglish year
 
     else if String.right 2 year == "00" then
-        String.join " "
+        joinToNumber
             [ arabicToEnglish century
             , "hundred"
             ]
 
     else
-        String.join " "
+        joinToNumber
             [ arabicToEnglish century
             , arabicToEnglish decadeAndYear
             ]
