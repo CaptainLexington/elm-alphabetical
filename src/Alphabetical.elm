@@ -3,7 +3,7 @@ module Alphabetical exposing
     , sort, compare, indexSort, naturalSort
     )
 
-{-| Alphabetiical is a library for sorting English words and phrases the way editors and writers tend to sort them, not how computers do.
+{-| Alphabetical is a library for sorting English words and phrases the way editors and writers tend to sort them, not how computers do.
 
 ##A Note About Proper Nouns
 Many proper nouns, such as people and place names, are very complicated to sort.
@@ -370,10 +370,10 @@ replaceDigitsWithEnglishWords internal =
     let
         digits =
             if internal then
-                "[0-9]+"
+                "\\d+"
 
             else
-                "^[0-9]+"
+                "^\\d+"
 
         digitsRegex =
             Maybe.withDefault Regex.never <|
@@ -390,6 +390,15 @@ replaceDigitsWithEnglishWords internal =
 type Chunk
     = StringPart String
     | IntPart String
+
+
+
+-- (TODO)
+
+
+replaceDigitsWithNumericalValues : String -> String
+replaceDigitsWithNumericalValues =
+    identity
 
 
 processForInitialNumberSort : NumberSort -> String -> String
@@ -441,7 +450,7 @@ replaceDigitsWithEnglishYear : String -> String
 replaceDigitsWithEnglishYear =
     let
         year =
-            "[0-9]+"
+            "\\b\\d{4}\\b"
 
         yearRegex =
             Maybe.withDefault Regex.never <|
@@ -499,7 +508,7 @@ process { sortMode, initialNumberSort, internalNumberSort, years, romanNumerals,
         -- First, perform whitespace-dependent processing!
         |> processForInitialArticles ignoreInitialArticle
         |> processForYears years
-        -- Convert Roman Numerals to Numbers
+        -- Convert Roman Numerals to Numbers (TODO)
         |> processForRomanNumerals romanNumerals
         -- Translate into either English or Elm Integers
         |> processForInitialNumberSort initialNumberSort
