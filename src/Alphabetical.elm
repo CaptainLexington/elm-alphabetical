@@ -1,6 +1,7 @@
 module Alphabetical exposing
     ( Options, SortMode(..), NumberSort(..)
     , sort, compare, indexSort, naturalSort
+    , indexSortOptions, naturalSortOptions
     )
 
 {-| Alphabetical is a library for sorting English words and phrases the way editors and writers tend to sort them, not how computers do.
@@ -29,6 +30,7 @@ Likewise, no attempt is made to alter the strings being sorted. A person's name 
 -}
 
 import List
+import NaturalOrdering
 import Regex
 import String
 
@@ -43,8 +45,10 @@ type SortMode
 {-| Whether to sort numbers according to their numerical value or the spelling of the English word.
 -}
 type NumberSort
-    = Lexically
-    | Numerically
+    = English
+      -- Sorting numerally is done with `elm-natural-ordering` after all other processing is done
+    | Value
+    | Unicode
 
 
 {-|
@@ -69,8 +73,8 @@ type alias Options =
 
 indexSortOptions =
     { sortMode = WordByWord
-    , initialNumberSort = Lexically
-    , internalNumberSort = Numerically
+    , initialNumberSort = English
+    , internalNumberSort = Value
     , years = True
     , romanNumerals = False
     , ignoreInitialArticle = True
@@ -79,8 +83,8 @@ indexSortOptions =
 
 naturalSortOptions =
     { sortMode = LetterByLetter
-    , initialNumberSort = Numerically
-    , internalNumberSort = Numerically
+    , initialNumberSort = Value
+    , internalNumberSort = Value
     , years = False
     , romanNumerals = False
     , ignoreInitialArticle = False
@@ -381,42 +385,29 @@ replaceDigitsWithEnglishWords internal =
     Regex.replace digitsRegex (.match >> arabicToEnglish)
 
 
-
--- NUMERALS TO INTEGERS
--- With due credit to mcordova47/elm-natural-ordering
-
-
-type Chunk
-    = StringPart String
-    | IntPart String
-
-
-
--- (TODO)
-
-
-replaceDigitsWithNumericalValues : String -> String
-replaceDigitsWithNumericalValues =
-    identity
-
-
 processForInitialNumberSort : NumberSort -> String -> String
 processForInitialNumberSort numberSort =
     case numberSort of
-        Lexically ->
+        English ->
             replaceDigitsWithEnglishWords False
 
-        Numerically ->
+        Value ->
+            identity
+
+        Unicode ->
             identity
 
 
 processForInternalNumberSort : NumberSort -> String -> String
 processForInternalNumberSort numberSort =
     case numberSort of
-        Lexically ->
+        English ->
             replaceDigitsWithEnglishWords True
 
-        Numerically ->
+        Value ->
+            identity
+
+        Unicode ->
             identity
 
 
@@ -531,7 +522,15 @@ compare options stringA stringB =
         processedB =
             process options stringB
     in
-    Basics.compare processedA processedB
+    case ( options.initialNumberSort, options.internalNumberSort ) of
+        ( Value, _ ) ->
+            NaturalOrdering.compare processedA processedB
+
+        ( _, Value ) ->
+            NaturalOrdering.compare processedA processedB
+
+        ( _, _ ) ->
+            Basics.compare processedA processedB
 
 
 {-| sort expects and returns a `List` of `Strings`, and so is less flexible than `compare`, but in addition to being more convenient, it is also more efficient. Using `compare`, each computation is done several times per entry; using `sort`, each computation is done only once per entry.
@@ -540,9 +539,20 @@ sort : Options -> List String -> List String
 sort options strings =
     let
         processedStrings =
-            List.map (\s -> Tuple.pair s (process options s)) strings
+            Debug.log "Processed Strings: " (List.map (\s -> Tuple.pair s (process options s)) strings)
+
+        compareNumbers =
+            case ( options.initialNumberSort, options.internalNumberSort ) of
+                ( Value, _ ) ->
+                    NaturalOrdering.compareOn Tuple.second
+
+                ( _, Value ) ->
+                    NaturalOrdering.compareOn Tuple.second
+
+                ( _, _ ) ->
+                    Basics.compare
     in
-    List.map Tuple.first (List.sortBy Tuple.second processedStrings)
+    List.map Tuple.first (List.sortWith compareNumbers processedStrings)
 
 
 {-| `indexSort` sorts according to how the index of a standard English-language non-fiction book would be sorted, and is probably the sort you want if you are sorting a list of English proper nouns, like movie titles or band names.
