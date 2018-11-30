@@ -51,6 +51,12 @@ type NumberSort
     | NumericalIndex
 
 
+type NumberPosition
+    = Initial
+    | Internal
+    | Terminal
+
+
 {-|
 
   - `sortMode` lets you choose between sorting letter by letter or word by word
@@ -65,6 +71,7 @@ type alias Options =
     { sortMode : SortMode
     , initialNumberSort : NumberSort
     , internalNumberSort : NumberSort
+    , terminalNumberSort : NumberSort
     , years : Bool
     , romanNumerals : Bool
     , ignoreInitialArticle : Bool
@@ -74,9 +81,10 @@ type alias Options =
 indexSortOptions =
     { sortMode = WordByWord
     , initialNumberSort = NumberName
-    , internalNumberSort = NumericalValue
+    , internalNumberSort = NumberName
+    , terminalNumberSort = NumericalValue
     , years = True
-    , romanNumerals = False
+    , romanNumerals = True
     , ignoreInitialArticle = True
     }
 
@@ -85,6 +93,7 @@ naturalSortOptions =
     { sortMode = LetterByLetter
     , initialNumberSort = NumericalValue
     , internalNumberSort = NumericalValue
+    , terminalNumberSort = NumericalValue
     , years = False
     , romanNumerals = False
     , ignoreInitialArticle = False
@@ -368,15 +377,19 @@ arabicToEnglish number =
         String.concat [ "Parse Error: ", number ]
 
 
-replaceDigitsWithEnglishWords : Bool -> String -> String
-replaceDigitsWithEnglishWords internal =
+replaceDigitsWithEnglishWords : NumberPosition -> String -> String
+replaceDigitsWithEnglishWords position =
     let
         digits =
-            if internal then
-                "\\d+"
+            case position of
+                Initial ->
+                    "^\\d+"
 
-            else
-                "^\\d+"
+                Internal ->
+                    "!^\\d+!$"
+
+                Terminal ->
+                    "\\d+$"
 
         digitsRegex =
             Maybe.withDefault Regex.never <|
@@ -389,7 +402,7 @@ processForInitialNumberSort : NumberSort -> String -> String
 processForInitialNumberSort numberSort =
     case numberSort of
         NumberName ->
-            replaceDigitsWithEnglishWords False
+            replaceDigitsWithEnglishWords Initial
 
         NumericalValue ->
             identity
@@ -402,7 +415,20 @@ processForInternalNumberSort : NumberSort -> String -> String
 processForInternalNumberSort numberSort =
     case numberSort of
         NumberName ->
-            replaceDigitsWithEnglishWords True
+            replaceDigitsWithEnglishWords Internal
+
+        NumericalValue ->
+            identity
+
+        NumericalIndex ->
+            identity
+
+
+processForTerminalNumberSort : NumberSort -> String -> String
+processForTerminalNumberSort numberSort =
+    case numberSort of
+        NumberName ->
+            replaceDigitsWithEnglishWords Terminal
 
         NumericalValue ->
             identity
@@ -561,18 +587,19 @@ processForInitialArticles ignoreInitialArticles string =
 
 
 process : Options -> String -> String
-process { sortMode, initialNumberSort, internalNumberSort, years, romanNumerals, ignoreInitialArticle } string =
+process { sortMode, initialNumberSort, internalNumberSort, terminalNumberSort, years, romanNumerals, ignoreInitialArticle } string =
     string
         -- Run all neutral processing steps
         |> processForAll
         -- First, perform whitespace-dependent processing!
         |> processForInitialArticles ignoreInitialArticle
         |> processForYears years
-        -- Convert Roman Numerals to Numbers (TODO)
+        -- Convert Roman Numerals to Numbers
         |> processForRomanNumerals romanNumerals
         -- Translate into either English or Elm Integers
         |> processForInitialNumberSort initialNumberSort
         |> processForInternalNumberSort internalNumberSort
+        |> processForTerminalNumberSort terminalNumberSort
         -- Now, handle whitespace appropriately
         |> processForSortMode sortMode
 
@@ -612,14 +639,17 @@ sort options strings =
             Debug.log "Processed Strings: " (List.map (\s -> Tuple.pair s (process options s)) strings)
 
         compareNumbers =
-            case ( options.initialNumberSort, options.internalNumberSort ) of
-                ( NumericalValue, _ ) ->
+            case ( options.initialNumberSort, options.internalNumberSort, options.terminalNumberSort ) of
+                ( NumericalValue, _, _ ) ->
                     NaturalOrdering.compareOn Tuple.second
 
-                ( _, NumericalValue ) ->
+                ( _, NumericalValue, _ ) ->
                     NaturalOrdering.compareOn Tuple.second
 
-                ( _, _ ) ->
+                ( _, _, NumericalValue ) ->
+                    NaturalOrdering.compareOn Tuple.second
+
+                ( _, _, _ ) ->
                     Basics.compare
     in
     List.map Tuple.first (List.sortWith compareNumbers processedStrings)
