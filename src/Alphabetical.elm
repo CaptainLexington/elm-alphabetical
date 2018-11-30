@@ -80,10 +80,10 @@ type alias Options =
 
 indexSortOptions =
     { sortMode = WordByWord
-    , initialNumberSort = NumberName
+    , initialNumberSort = NumericalIndex
     , internalNumberSort = NumberName
     , terminalNumberSort = NumericalValue
-    , years = True
+    , years = False
     , romanNumerals = True
     , ignoreInitialArticle = True
     }
@@ -398,6 +398,68 @@ replaceDigitsWithEnglishWords position =
     Regex.replace digitsRegex (.match >> arabicToEnglish)
 
 
+prependNumberByInitialDigit : String -> String
+prependNumberByInitialDigit number =
+    let
+        initialDigit =
+            String.left 1 number
+
+        prefix =
+            case initialDigit of
+                "1" ->
+                    "A"
+
+                "2" ->
+                    "B"
+
+                "3" ->
+                    "C"
+
+                "4" ->
+                    "D"
+
+                "5" ->
+                    "E"
+
+                "6" ->
+                    "F"
+
+                "7" ->
+                    "G"
+
+                "8" ->
+                    "H"
+
+                "9" ->
+                    "I"
+
+                _ ->
+                    ""
+    in
+    prefix ++ number
+
+
+prependIndexNumbers : NumberPosition -> String -> String
+prependIndexNumbers position =
+    let
+        digits =
+            case position of
+                Initial ->
+                    "^\\d+"
+
+                Internal ->
+                    "!^\\d+!$"
+
+                Terminal ->
+                    "\\d+$"
+
+        digitsRegex =
+            Maybe.withDefault Regex.never <|
+                Regex.fromString digits
+    in
+    Regex.replace digitsRegex (.match >> prependNumberByInitialDigit)
+
+
 processForInitialNumberSort : NumberSort -> String -> String
 processForInitialNumberSort numberSort =
     case numberSort of
@@ -408,7 +470,7 @@ processForInitialNumberSort numberSort =
             identity
 
         NumericalIndex ->
-            identity
+            prependIndexNumbers Initial
 
 
 processForInternalNumberSort : NumberSort -> String -> String
@@ -421,7 +483,7 @@ processForInternalNumberSort numberSort =
             identity
 
         NumericalIndex ->
-            identity
+            prependIndexNumbers Initial
 
 
 processForTerminalNumberSort : NumberSort -> String -> String
@@ -434,7 +496,7 @@ processForTerminalNumberSort numberSort =
             identity
 
         NumericalIndex ->
-            identity
+            prependIndexNumbers Initial
 
 
 arabicToEnglishYear : String -> String
