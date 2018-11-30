@@ -15,8 +15,6 @@ Many proper nouns, such as people and place names, are very complicated to sort.
 
 For these reasons, no attempt is made to identify proper nouns or distingish between different categories of them.
 
-Likewise, no attempt is made to alter the strings being sorted. A person's name is almost always formatted in an index as "Last, First Middle"; however, Alphabetical will need to have strings provided in this format to be sorted accordingly.
-
 
 ## Options
 
@@ -35,20 +33,22 @@ import Regex
 import String
 
 
-{-| Letter-by-letter sorts strings as though every string were a single word; word-by-word sort sorts multiple-word phrases together by initial words. Thus, in letter-by-letter sort, "New Zealand" comes after "Newton", becauze Z comes after T; in word-by-word sort, "New Zealand" comes before "Newton" because all phrases beginning with the word "new" come before words beginning the with the letters n-e-w.
+{-| Letter-by-letter sorts strings as though every string were a single word; word-by-word sorts multiple-word phrases together by initial words. Thus, in letter-by-letter sort, "New Zealand" comes after "Newton", becauze Z comes after T; in word-by-word sort, "New Zealand" comes before "Newton" because all phrases beginning with the word "new" come before words beginning the with the letters n-e-w.
 -}
 type SortMode
     = LetterByLetter
     | WordByWord
 
 
-{-| Whether to sort numbers according to their numerical value or the spelling of the English word.
+{-| How to sort numbers.
+-`NumberName` sorts numbers up to 1 Trillion by their English name; larger numbers are sorted numerically.
+-`NumericalValue` sorts numbers by numerical value (using [elm-natural-ordering](https://package.elm-lang.org/packages/mcordova47/elm-natural-ordering/latest))
+-`NumericalIndex` sorts numerically _after_ grouping numbers by their initial digit.
 -}
 type NumberSort
-    = English
-      -- Sorting numerally is done with `elm-natural-ordering` after all other processing is done
-    | Value
-    | Unicode
+    = NumberName
+    | NumericalValue
+    | NumericalIndex
 
 
 {-|
@@ -56,8 +56,8 @@ type NumberSort
   - `sortMode` lets you choose between sorting letter by letter or word by word
   - `initialNumberSort` sets a `NumberSort` for numbers encountered at the beginning of a string.
   - `internalNumberSort` sets a `NumberSort` for numbers encountered after at least some letters
-  - When `years` is `True`, Alphabetical will attempt to sort four-digit numbers alphabetically, regardless of the values for `initialNumberSort` or `internalNumberSort` in English words the way they are normally pronounced as years, e.g. "1984" becomes "Nineteen Eighy Four" instead of "One Thousand, Nine Hundred Eighty Four"
-  - When `romanNumberals` is `True`, it will attempt to sort strings that resemble Roman Numerals as Arabic numberals, sorted according to `initialNumberSort` or `internalNumberSort` as appropriate
+  - When `years` is `True`, Alphabetical will attempt to sort four-digit numbers alphabetically, regardless of the values for `initialNumberSort` or `internalNumberSort`, in English words the way they are normally pronounced as years, e.g. "1984" becomes "Nineteen Eighy Four" instead of "One Thousand, Nine Hundred Eighty Four"
+  - When `romanNumberals` is `True`, it will attempt to sort strings that resemble Roman Numerals according to `initialNumberSort` or `internalNumberSort`
   - when `ignoreInitialArticle` is true, Alphabetical sorts phrases that begin with English articles "The" or "A" according to whatever comes after the article.
 
 -}
@@ -73,8 +73,8 @@ type alias Options =
 
 indexSortOptions =
     { sortMode = WordByWord
-    , initialNumberSort = English
-    , internalNumberSort = Value
+    , initialNumberSort = NumberName
+    , internalNumberSort = NumericalValue
     , years = True
     , romanNumerals = False
     , ignoreInitialArticle = True
@@ -83,8 +83,8 @@ indexSortOptions =
 
 naturalSortOptions =
     { sortMode = LetterByLetter
-    , initialNumberSort = Value
-    , internalNumberSort = Value
+    , initialNumberSort = NumericalValue
+    , internalNumberSort = NumericalValue
     , years = False
     , romanNumerals = False
     , ignoreInitialArticle = False
@@ -94,12 +94,12 @@ naturalSortOptions =
 processForAll : String -> String
 processForAll string =
     let
-        validCharacters =
+        invalidCharacters =
             "[^A-Za-z0-9À-ÿ() ]"
 
-        validCharacterRegex =
+        invalidCharacterRegex =
             Maybe.withDefault Regex.never <|
-                Regex.fromString validCharacters
+                Regex.fromString invalidCharacters
     in
     string
         -- All strings need to be lowercased for proper comparison
@@ -108,7 +108,7 @@ processForAll string =
         -- Treat parens as whitespace
         |> String.replace "(" " "
         |> String.replace ")" " "
-        |> Regex.replace validCharacterRegex (\_ -> "")
+        |> Regex.replace invalidCharacterRegex (\_ -> "")
 
 
 
@@ -388,26 +388,26 @@ replaceDigitsWithEnglishWords internal =
 processForInitialNumberSort : NumberSort -> String -> String
 processForInitialNumberSort numberSort =
     case numberSort of
-        English ->
+        NumberName ->
             replaceDigitsWithEnglishWords False
 
-        Value ->
+        NumericalValue ->
             identity
 
-        Unicode ->
+        NumericalIndex ->
             identity
 
 
 processForInternalNumberSort : NumberSort -> String -> String
 processForInternalNumberSort numberSort =
     case numberSort of
-        English ->
+        NumberName ->
             replaceDigitsWithEnglishWords True
 
-        Value ->
+        NumericalValue ->
             identity
 
-        Unicode ->
+        NumericalIndex ->
             identity
 
 
@@ -458,9 +458,79 @@ processForYears years =
         identity
 
 
+romanNumeralDigitToInt : Char -> Int
+romanNumeralDigitToInt rnd =
+    case rnd of
+        'M' ->
+            1000
+
+        'D' ->
+            500
+
+        'C' ->
+            100
+
+        'L' ->
+            50
+
+        'X' ->
+            10
+
+        'V' ->
+            5
+
+        'I' ->
+            1
+
+        _ ->
+            0
+
+
+addOrSubstractRomanNumeralValue : Char -> ( Int, Int ) -> ( Int, Int )
+addOrSubstractRomanNumeralValue rnd acc =
+    let
+        nextValue =
+            romanNumeralDigitToInt rnd
+
+        ( total, previousValue ) =
+            acc
+    in
+    if previousValue > nextValue then
+        ( total - nextValue, nextValue )
+
+    else
+        ( total + nextValue, nextValue )
+
+
+romanNumeralToInt : String -> Int
+romanNumeralToInt roman =
+    let
+        reverse =
+            String.toList roman
+    in
+    Tuple.first
+        (List.foldr
+            addOrSubstractRomanNumeralValue
+            ( 0, 0 )
+            reverse
+        )
+
+
 processForRomanNumerals : Bool -> String -> String
-processForRomanNumerals romanNumerals =
-    identity
+processForRomanNumerals parse =
+    if parse then
+        let
+            romanNumeral =
+                "^(?=[MDCLXVI])M*(C[MD]|D?C{0,3})(X[CL]|L?X{0,3})(I[XV]|V?I{0,3})$"
+
+            romanNumeralRegex =
+                Maybe.withDefault Regex.never <|
+                    Regex.fromString romanNumeral
+        in
+        Regex.replace romanNumeralRegex (.match >> romanNumeralToInt >> String.fromInt)
+
+    else
+        identity
 
 
 startsWithThe : String -> Bool
@@ -523,10 +593,10 @@ compare options stringA stringB =
             process options stringB
     in
     case ( options.initialNumberSort, options.internalNumberSort ) of
-        ( Value, _ ) ->
+        ( NumericalValue, _ ) ->
             NaturalOrdering.compare processedA processedB
 
-        ( _, Value ) ->
+        ( _, NumericalValue ) ->
             NaturalOrdering.compare processedA processedB
 
         ( _, _ ) ->
@@ -543,10 +613,10 @@ sort options strings =
 
         compareNumbers =
             case ( options.initialNumberSort, options.internalNumberSort ) of
-                ( Value, _ ) ->
+                ( NumericalValue, _ ) ->
                     NaturalOrdering.compareOn Tuple.second
 
-                ( _, Value ) ->
+                ( _, NumericalValue ) ->
                     NaturalOrdering.compareOn Tuple.second
 
                 ( _, _ ) ->
