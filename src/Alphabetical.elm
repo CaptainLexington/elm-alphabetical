@@ -80,10 +80,10 @@ type alias Options =
 
 indexSortOptions =
     { sortMode = WordByWord
-    , initialNumberSort = NumericalIndex
+    , initialNumberSort = NumberName
     , internalNumberSort = NumberName
     , terminalNumberSort = NumericalValue
-    , years = False
+    , years = True
     , romanNumerals = True
     , ignoreInitialArticle = True
     }
