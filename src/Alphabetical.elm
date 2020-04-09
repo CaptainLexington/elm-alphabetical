@@ -1,7 +1,7 @@
 module Alphabetical exposing
     ( Options, SortMode(..), NumberSort(..)
     , sort, compare, indexSort, naturalSort
-    , indexSortOptions, naturalSortOptions
+    , compareOn, indexSortOptions, naturalSortOptions
     )
 
 {-| Alphabetical is a library for sorting English words and phrases the way editors and writers tend to sort them, not how computers do.
@@ -80,10 +80,10 @@ type alias Options =
 
 indexSortOptions =
     { sortMode = WordByWord
-    , initialNumberSort = NumberName
+    , initialNumberSort = NumericalIndex
     , internalNumberSort = NumberName
     , terminalNumberSort = NumericalValue
-    , years = True
+    , years = False
     , romanNumerals = True
     , ignoreInitialArticle = True
     }
@@ -690,6 +690,11 @@ compare options stringA stringB =
 
         ( _, _ ) ->
             Basics.compare processedA processedB
+
+
+compareOn : Options -> (a -> String) -> a -> a -> Order
+compareOn options fn left right =
+    compare options (fn left) (fn right)
 
 
 {-| sort expects and returns a `List` of `Strings`, and so is less flexible than `compare`, but in addition to being more convenient, it is also more efficient. Using `compare`, each computation is done several times per entry; using `sort`, each computation is done only once per entry.
